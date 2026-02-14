@@ -2,6 +2,7 @@ const STORAGE_KEYS = {
   users: 'edu_users',
   materials: 'edu_materials',
   session: 'edu_session',
+  loginAttempts: 'edu_login_attempts',
 };
 
 const defaultMaterials = {
@@ -9,6 +10,9 @@ const defaultMaterials = {
   ppt: [],
   homework: [],
 };
+
+const MAX_ATTEMPTS = 5;
+const LOCK_MS = 60 * 1000;
 
 const authSection = document.getElementById('auth-section');
 const dashboard = document.getElementById('dashboard');
@@ -58,13 +62,31 @@ function getSession() {
 }
 
 function setSession(user) {
-  saveJson(STORAGE_KEYS.session, user);
+  saveJson(STORAGE_KEYS.session, {
+    username: user.username,
+    role: user.role,
+  });
+}
+
+function getAttempts() {
+  return loadJson(STORAGE_KEYS.loginAttempts, {});
+}
+
+function saveAttempts(value) {
+  saveJson(STORAGE_KEYS.loginAttempts, value);
 }
 
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function createMetaLine(text) {
+  const div = document.createElement('div');
+  div.className = 'material-meta';
+  div.textContent = text;
+  return div;
 }
 
 function renderMaterials() {
@@ -91,11 +113,14 @@ function renderMaterials() {
       .forEach((item) => {
         const li = document.createElement('li');
         li.className = 'material-item';
-        li.innerHTML = `
-          <h4>${item.title}</h4>
-          <div class="material-meta">发布者：${item.author}\n发布时间：${item.createdAt}</div>
-          <div class="material-meta">${item.content}</div>
-        `;
+
+        const title = document.createElement('h4');
+        title.textContent = item.title;
+
+        const meta = createMetaLine(`发布者：${item.author}\n发布时间：${item.createdAt}`);
+        const content = createMetaLine(item.content);
+
+        li.append(title, meta, content);
         list.appendChild(li);
       });
   });
@@ -128,14 +153,99 @@ function logout() {
   showToast('已退出登录');
 }
 
+async function hashPassword(password) {
+  if (!window.crypto?.subtle) {
+    return `plain:${password}`;
+  }
+
+  const bytes = new TextEncoder().encode(password);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const hashArray = Array.from(new Uint8Array(digest));
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `sha256:${hashHex}`;
+}
+
+function isStrongPassword(password) {
+  return /[A-Za-z]/.test(password) && /\d/.test(password);
+}
+
+async function verifyPassword(user, inputPassword) {
+  if (user.passwordHash) {
+    const inputHash = await hashPassword(inputPassword);
+    return inputHash === user.passwordHash;
+  }
+
+  if (typeof user.password === 'string' && user.password === inputPassword) {
+    user.passwordHash = await hashPassword(inputPassword);
+    delete user.password;
+    return true;
+  }
+
+  return false;
+}
+
+function getAttemptKey(username, role) {
+  return `${username}::${role}`;
+}
+
+function isLocked(username, role) {
+  const key = getAttemptKey(username, role);
+  const attempts = getAttempts();
+  const record = attempts[key];
+
+  if (!record || !record.lockUntil) {
+    return false;
+  }
+
+  if (Date.now() > record.lockUntil) {
+    delete attempts[key];
+    saveAttempts(attempts);
+    return false;
+  }
+
+  return true;
+}
+
+function registerFailure(username, role) {
+  const key = getAttemptKey(username, role);
+  const attempts = getAttempts();
+  const record = attempts[key] ?? { count: 0, lockUntil: 0 };
+  record.count += 1;
+
+  if (record.count >= MAX_ATTEMPTS) {
+    record.lockUntil = Date.now() + LOCK_MS;
+    record.count = 0;
+  }
+
+  attempts[key] = record;
+  saveAttempts(attempts);
+}
+
+function clearFailure(username, role) {
+  const key = getAttemptKey(username, role);
+  const attempts = getAttempts();
+  delete attempts[key];
+  saveAttempts(attempts);
+}
+
 tabs.forEach((tab) => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
 
-registerForm.addEventListener('submit', (event) => {
+registerForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const username = document.getElementById('register-username').value.trim();
   const password = document.getElementById('register-password').value;
   const role = document.getElementById('register-role').value;
+
+  if (!/^[A-Za-z0-9_]{3,24}$/.test(username)) {
+    showToast('用户名仅支持字母、数字、下划线，长度3-24位');
+    return;
+  }
+
+  if (!isStrongPassword(password)) {
+    showToast('密码需包含字母和数字');
+    return;
+  }
 
   const users = getUsers();
   if (users.some((user) => user.username === username)) {
@@ -143,7 +253,12 @@ registerForm.addEventListener('submit', (event) => {
     return;
   }
 
-  const newUser = { username, password, role };
+  const newUser = {
+    username,
+    role,
+    passwordHash: await hashPassword(password),
+  };
+
   users.push(newUser);
   saveJson(STORAGE_KEYS.users, users);
 
@@ -152,21 +267,29 @@ registerForm.addEventListener('submit', (event) => {
   switchTab('login');
 });
 
-loginForm.addEventListener('submit', (event) => {
+loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
   const role = document.getElementById('login-role').value;
 
-  const user = getUsers().find(
-    (item) => item.username === username && item.password === password && item.role === role,
-  );
-  if (!user) {
+  if (isLocked(username, role)) {
+    showToast('登录失败次数过多，请1分钟后再试');
+    return;
+  }
+
+  const users = getUsers();
+  const user = users.find((item) => item.username === username && item.role === role);
+
+  if (!user || !(await verifyPassword(user, password))) {
+    registerFailure(username, role);
     showToast('账号、密码或身份不匹配');
     return;
   }
 
+  saveJson(STORAGE_KEYS.users, users);
+  clearFailure(username, role);
   setSession(user);
   showToast('登录成功');
   loginForm.reset();
@@ -205,7 +328,7 @@ logoutBtn.addEventListener('click', logout);
 (function bootstrap() {
   saveJson(STORAGE_KEYS.materials, getMaterials());
   const session = getSession();
-  if (session) {
+  if (session && session.username && session.role) {
     enterDashboard(session);
   } else {
     switchTab('login');
