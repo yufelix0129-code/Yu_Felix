@@ -157,10 +157,13 @@ loginForm.addEventListener('submit', (event) => {
 
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
+  const role = document.getElementById('login-role').value;
 
-  const user = getUsers().find((item) => item.username === username && item.password === password);
+  const user = getUsers().find(
+    (item) => item.username === username && item.password === password && item.role === role,
+  );
   if (!user) {
-    showToast('账号或密码错误');
+    showToast('账号、密码或身份不匹配');
     return;
   }
 
