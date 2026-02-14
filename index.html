@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>多终端课堂学习平台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <h1>多终端课堂学习平台</h1>
+        <p>一站式支持：课前预习、课上PPT、课后作业</p>
+        <div class="header-badges">
+          <span>📱 多终端访问</span>
+          <span>👩‍🏫 教师发布资料</span>
+          <span>🧑‍🎓 学生分阶段学习</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section id="auth-section" class="card auth-card">
+        <div class="tabs">
+          <button class="tab active" data-tab="login" type="button">登录</button>
+          <button class="tab" data-tab="register" type="button">注册</button>
+        </div>
+
+        <form id="login-form" class="form active" autocomplete="on">
+          <h2>账号登录</h2>
+          <p class="form-tip">请使用注册时的身份登录，避免进入错误面板。</p>
+          <label>
+            用户名
+            <input type="text" id="login-username" required minlength="3" maxlength="24" />
+          </label>
+          <label>
+            密码
+            <input type="password" id="login-password" required minlength="6" maxlength="64" />
+          </label>
+          <label>
+            登录身份
+            <select id="login-role" required>
+              <option value="student">学生</option>
+              <option value="teacher">老师</option>
+            </select>
+          </label>
+          <button type="submit">登录</button>
+        </form>
+
+        <form id="register-form" class="form" autocomplete="on">
+          <h2>新用户注册</h2>
+          <p class="form-tip">建议密码包含字母和数字，提升账号安全性。</p>
+          <label>
+            用户名
+            <input type="text" id="register-username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" />
+          </label>
+          <label>
+            密码
+            <input type="password" id="register-password" required minlength="6" maxlength="64" />
+          </label>
+          <label>
+            身份
+            <select id="register-role" required>
+              <option value="student">学生</option>
+              <option value="teacher">老师</option>
+            </select>
+          </label>
+          <button type="submit">注册</button>
+        </form>
+      </section>
+
+      <section id="dashboard" class="hidden">
+        <div class="card topbar">
+          <div>
+            <h2 id="welcome-text"></h2>
+            <p id="role-text"></p>
+          </div>
+          <button id="logout-btn" class="danger" type="button">退出登录</button>
+        </div>
+
+        <div id="teacher-panel" class="panel hidden">
+          <article class="card">
+            <h3>老师资料发布中心</h3>
+            <form id="upload-form" class="form-inline">
+              <label>
+                资料类型
+                <select id="material-type" required>
+                  <option value="preview">课前预习</option>
+                  <option value="ppt">课上 PPT</option>
+                  <option value="homework">课后作业</option>
+                </select>
+              </label>
+              <label>
+                标题
+                <input type="text" id="material-title" required maxlength="80" />
+              </label>
+              <label>
+                内容/链接
+                <textarea id="material-content" required maxlength="1000" placeholder="填写讲义说明、网盘链接或作业要求"></textarea>
+              </label>
+              <button type="submit">上传资料</button>
+            </form>
+          </article>
+        </div>
+
+        <div id="student-panel" class="panel hidden">
+          <article class="card">
+            <h3>学生学习中心</h3>
+            <p>建议按照「预习 → PPT → 作业」顺序学习，效果更好。</p>
+          </article>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <h3>课前预习</h3>
+            <ul id="preview-list" class="material-list"></ul>
+          </article>
+
+          <article class="card">
+            <h3>课上 PPT</h3>
+            <ul id="ppt-list" class="material-list"></ul>
+          </article>
+
+          <article class="card">
+            <h3>课后作业</h3>
+            <ul id="homework-list" class="material-list"></ul>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
